@@ -333,35 +333,39 @@ public class DFSUtil {
                 //TODO multy threads
                 InputSplit[] splits = in.getSplits(conf, 1);
 
-                RecordReader reader = in.getRecordReader(splits[0], conf, Reporter.NULL);
-                Object key = reader.createKey();
-                Object value = reader.createValue();
-                // 获取列信息
-                List<? extends StructField> fields = inspector.getAllStructFieldRefs();
+				RecordReader reader = null;
+				for (InputSplit ins: splits) {
+					reader = in.getRecordReader(ins, conf, Reporter.NULL);
+					Object key = reader.createKey();
+					Object value = reader.createValue();
+					// 获取列信息
+					List<? extends StructField> fields = inspector.getAllStructFieldRefs();
 
-                List<Object> recordFields;
-                while (reader.next(key, value)) {
-                    recordFields = new ArrayList<Object>();
+					List<Object> recordFields;
+					while (reader.next(key, value)) {
+						recordFields = new ArrayList<Object>();
 
-                    for (int i = 0; i <= columnIndexMax; i++) {
-                        Object field = inspector.getStructFieldData(value, fields.get(i));
-                        recordFields.add(field);
-                    }
-                    transportOneRecord(column, recordFields, recordSender,
-                            taskPluginCollector, isReadAllColumns, nullFormat);
-                }
-                reader.close();
-            } catch (Exception e) {
-                String message = String.format("从orcfile文件路径[%s]中读取数据发生异常，请联系系统管理员。"
-                        , sourceOrcFilePath);
-                LOG.error(message);
-                throw DataXException.asDataXException(HdfsReaderErrorCode.READ_FILE_ERROR, message);
-            }
-        } else {
-            String message = String.format("请确认您所读取的列配置正确！columnIndexMax 小于0,column:%s", JSON.toJSONString(column));
-            throw DataXException.asDataXException(HdfsReaderErrorCode.BAD_CONFIG_VALUE, message);
-        }
-    }
+						for (int i = 0; i <= columnIndexMax; i++) {
+							Object field = inspector.getStructFieldData(value, fields.get(i));
+							recordFields.add(field);
+						}
+						transportOneRecord(column, recordFields, recordSender,
+								taskPluginCollector, isReadAllColumns, nullFormat);
+					}
+				}
+				if (reader != null) {
+					reader.close();
+				}
+			} catch (Exception e) {
+				String message = String.format("从%s文件路径[%s]中读取数据发生异常，请联系系统管理员。", "ORC", sourceOrcFilePath);
+				LOG.error(message);
+				throw DataXException.asDataXException(HdfsReaderErrorCode.READ_FILE_ERROR, message);
+			}
+		} else {
+			String message = String.format("请确认您所读取的列配置正确！columnIndexMax 小于0,column:%s", JSON.toJSONString(column));
+			throw DataXException.asDataXException(HdfsReaderErrorCode.BAD_CONFIG_VALUE, message);
+		}
+	}
 
     private Record transportOneRecord(List<ColumnEntry> columnConfigs, List<Object> recordFields
             , RecordSender recordSender, TaskPluginCollector taskPluginCollector, boolean isReadAllColumns, String nullFormat) {
